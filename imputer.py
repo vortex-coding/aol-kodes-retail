@@ -12,6 +12,7 @@ import sys
 import os
 import time
 import argparse
+import random
 from pathlib import Path
 from datetime import datetime
 
@@ -40,6 +41,123 @@ BANNER = r"""
 [bold cyan]                                   |_|  & 3NF Normalizer  [/bold cyan]
 [dim] High-Performance Data Engineering & Quality Assurance CLI • v1.3.0[/dim]
 """
+
+# ---------------------------------------------------------------------------
+# Synthetic customer contact data (deterministic per customer_id)
+# ---------------------------------------------------------------------------
+PROFILE_SEED = 42
+
+FIRST_NAMES = [
+    "James", "Oliver", "Harry", "Jack", "George", "Noah", "Leo", "Arthur", "Oscar", "Henry",
+    "Emma", "Olivia", "Amelia", "Isla", "Ava", "Mia", "Grace", "Sophie", "Charlotte", "Lily",
+    "Lukas", "Hans", "Pierre", "Luca", "Mateo", "Sven", "Jan", "Andre", "Marco", "Pablo",
+    "Anna", "Marie", "Sofia", "Elena", "Clara", "Ingrid", "Greta", "Lucia", "Nina", "Eva",
+]
+LAST_NAMES = [
+    "Smith", "Jones", "Taylor", "Brown", "Wilson", "Davies", "Evans", "Thomas", "Johnson", "Roberts",
+    "Walker", "Wright", "Robinson", "Thompson", "White", "Hughes", "Edwards", "Green", "Hall", "Wood",
+    "Muller", "Schmidt", "Dubois", "Martin", "Rossi", "Garcia", "Jansen", "Peeters", "Silva", "Novak",
+]
+STREET_NAMES = [
+    "High", "Station", "Church", "Park", "Victoria", "Green", "Manor", "Mill", "King", "Queen",
+    "London", "York", "Oak", "Maple", "Rose", "School", "Bridge", "Garden", "Hill", "Lake",
+]
+STREET_TYPES = ["Street", "Road", "Lane", "Avenue", "Drive", "Close", "Way", "Court"]
+EMAIL_DOMAINS = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "mail.com", "example.com"]
+
+CITIES_BY_COUNTRY = {
+    "United Kingdom": ["London", "Manchester", "Birmingham", "Leeds", "Bristol", "Liverpool", "Sheffield", "Newcastle"],
+    "Germany": ["Berlin", "Munich", "Hamburg", "Frankfurt", "Cologne", "Stuttgart"],
+    "France": ["Paris", "Lyon", "Marseille", "Toulouse", "Nantes", "Lille"],
+    "EIRE": ["Dublin", "Cork", "Galway", "Limerick", "Waterford"],
+    "Spain": ["Madrid", "Barcelona", "Valencia", "Seville", "Bilbao"],
+    "Netherlands": ["Amsterdam", "Rotterdam", "Utrecht", "The Hague", "Eindhoven"],
+    "Belgium": ["Brussels", "Antwerp", "Ghent", "Bruges", "Leuven"],
+    "Switzerland": ["Zurich", "Geneva", "Basel", "Bern", "Lausanne"],
+    "Portugal": ["Lisbon", "Porto", "Braga", "Coimbra", "Faro"],
+    "Australia": ["Sydney", "Melbourne", "Brisbane", "Perth", "Adelaide"],
+    "Italy": ["Rome", "Milan", "Naples", "Turin", "Florence"],
+    "Sweden": ["Stockholm", "Gothenburg", "Malmo", "Uppsala"],
+    "Norway": ["Oslo", "Bergen", "Trondheim", "Stavanger"],
+    "Denmark": ["Copenhagen", "Aarhus", "Odense", "Aalborg"],
+    "Austria": ["Vienna", "Graz", "Salzburg", "Linz"],
+    "Poland": ["Warsaw", "Krakow", "Gdansk", "Wroclaw"],
+    "Finland": ["Helsinki", "Espoo", "Tampere", "Turku"],
+    "USA": ["New York", "Chicago", "Houston", "Seattle", "Boston"],
+    "Canada": ["Toronto", "Vancouver", "Montreal", "Calgary"],
+    "Japan": ["Tokyo", "Osaka", "Nagoya", "Yokohama", "Kyoto"],
+    "Singapore": ["Singapore"],
+    "Hong Kong": ["Hong Kong", "Kowloon", "Tsuen Wan"],
+    "Israel": ["Tel Aviv", "Jerusalem", "Haifa", "Beersheba"],
+    "Greece": ["Athens", "Thessaloniki", "Patras", "Heraklion"],
+    "Lithuania": ["Vilnius", "Kaunas", "Klaipeda"],
+    "Iceland": ["Reykjavik", "Akureyri", "Kopavogur"],
+    "Czech Republic": ["Prague", "Brno", "Ostrava", "Plzen"],
+    "Cyprus": ["Nicosia", "Limassol", "Larnaca", "Paphos"],
+    "Malta": ["Valletta", "Sliema", "Mosta", "Birkirkara"],
+    "Brazil": ["Sao Paulo", "Rio de Janeiro", "Brasilia", "Salvador"],
+    "Lebanon": ["Beirut", "Tripoli", "Sidon", "Tyre"],
+    "Saudi Arabia": ["Riyadh", "Jeddah", "Dammam", "Mecca"],
+    "Bahrain": ["Manama", "Riffa", "Muharraq"],
+    "United Arab Emirates": ["Dubai", "Abu Dhabi", "Sharjah", "Ajman"],
+    "Thailand": ["Bangkok", "Chiang Mai", "Phuket", "Pattaya"],
+    "Nigeria": ["Lagos", "Abuja", "Kano", "Ibadan"],
+    "RSA": ["Johannesburg", "Cape Town", "Durban", "Pretoria"],
+    "Korea": ["Seoul", "Busan", "Incheon", "Daegu"],
+    "Channel Islands": ["St Helier", "St Peter Port", "St Aubin"],
+}
+FALLBACK_CITIES = ["Springfield", "Riverside", "Fairview", "Georgetown", "Clinton", "Salem"]
+
+PHONE_PREFIX_BY_COUNTRY = {
+    "United Kingdom": "+44", "Germany": "+49", "France": "+33", "EIRE": "+353", "Spain": "+34",
+    "Netherlands": "+31", "Belgium": "+32", "Switzerland": "+41", "Portugal": "+351",
+    "Australia": "+61", "Italy": "+39", "Sweden": "+46", "Norway": "+47", "Denmark": "+45",
+    "Austria": "+43", "Poland": "+48", "Finland": "+358", "USA": "+1", "Canada": "+1",
+    "Japan": "+81", "Singapore": "+65", "Hong Kong": "+852", "Israel": "+972", "Greece": "+30",
+    "Lithuania": "+370", "Iceland": "+354", "Czech Republic": "+420", "Cyprus": "+357", "Malta": "+356",
+    "Brazil": "+55", "Lebanon": "+961", "Saudi Arabia": "+966", "Bahrain": "+973",
+    "United Arab Emirates": "+971", "Thailand": "+66", "Nigeria": "+234", "RSA": "+27",
+    "Korea": "+82", "Channel Islands": "+44",
+}
+
+GUEST_PROFILE = {
+    "customer_name": "Guest Customer",
+    "email": "guest@example.com",
+    "phone_number": "+44 0000 000000",
+    "address": "Not Provided",
+    "city": "Not Provided",
+}
+
+def generate_customer_profile(customer_id: int, country: str) -> dict:
+    """Generate a fake but reproducible contact profile for one customer.
+
+    The same customer_id always yields the same profile, so re-running the
+    pipeline does not change the data. customer_id 0 (the guest account) gets
+    a fixed placeholder instead of random data.
+    """
+    if customer_id == 0:
+        return dict(GUEST_PROFILE)
+
+    rng = random.Random(f"{PROFILE_SEED}-{customer_id}")
+    first = rng.choice(FIRST_NAMES)
+    last = rng.choice(LAST_NAMES)
+    # customer_id in the local part keeps every email unique
+    email = f"{first}.{last}{customer_id}@{rng.choice(EMAIL_DOMAINS)}".lower()
+
+    # countries not in the table (e.g. "Unspecified") get a local-style number with no country code
+    prefix = PHONE_PREFIX_BY_COUNTRY.get(country, "0")
+    phone = f"{prefix} {rng.randint(100, 999)} {rng.randint(100, 999)} {rng.randint(1000, 9999)}"
+
+    address = f"{rng.randint(1, 250)} {rng.choice(STREET_NAMES)} {rng.choice(STREET_TYPES)}"
+    city = rng.choice(CITIES_BY_COUNTRY.get(country, FALLBACK_CITIES))
+
+    return {
+        "customer_name": f"{first} {last}",
+        "email": email,
+        "phone_number": phone,
+        "address": address,
+        "city": city,
+    }
 
 def print_header():
     console.print(BANNER)
@@ -278,6 +396,12 @@ def clean_and_normalize(input_file: Path, output_dir: Path, guest_prefix: int = 
         cust_df['customer_type'] = cust_df['customer_id'].apply(
             lambda cid: 'Guest' if cid == 0 else 'Registered'
         )
+        profiles = pd.DataFrame(
+            [generate_customer_profile(cid, ctry) for cid, ctry in zip(cust_df['customer_id'], cust_df['country'])],
+            index=cust_df.index
+        )
+        cust_df = pd.concat([cust_df, profiles], axis=1)
+        cust_df = cust_df[['customer_id', 'customer_name', 'email', 'phone_number', 'address', 'city', 'country', 'customer_type']]
         cust_df.sort_values(by='customer_id', inplace=True)
         progress.update(deconstruct_task, completed=25)
 
