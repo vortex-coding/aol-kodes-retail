@@ -7,11 +7,18 @@ DROP TABLE IF EXISTS product CASCADE;
 DROP TABLE IF EXISTS customer CASCADE;
 
 -- customer table
+-- column order matches customers.csv, so \copy works without a column list
 CREATE TABLE customer (
     customer_id     INT             NOT NULL,
-    customer_type   VARCHAR(20)     NOT NULL,
+    customer_name   VARCHAR(100)    NOT NULL,
+    email           VARCHAR(150)    NOT NULL,
+    phone_number    VARCHAR(30)     NOT NULL,
+    address         VARCHAR(200)    NOT NULL,
+    city            VARCHAR(100)    NOT NULL,
     country         VARCHAR(60)     NOT NULL,
+    customer_type   VARCHAR(20)     NOT NULL,
     CONSTRAINT pk_customer PRIMARY KEY (customer_id),
+    CONSTRAINT uq_customer_email UNIQUE (email),
     CONSTRAINT chk_customer_type CHECK (customer_type IN ('Registered', 'Guest'))
 );
 
@@ -83,6 +90,9 @@ create index idx_line_product on invoice_line (stock_code);
 CREATE OR REPLACE VIEW view_customer_rfm AS
 SELECT 
     c.customer_id,
+    c.customer_name,
+    c.email,
+    c.city,
     c.customer_type,
     c.country,
     MIN(i.invoice_date)                                 AS first_purchase_date,
@@ -97,5 +107,8 @@ left join invoice_line l
     ON i.invoice_no = l.invoice_no
 GROUP BY 
     c.customer_id, 
+    c.customer_name,
+    c.email,
+    c.city,
     c.customer_type, 
     c.country;
